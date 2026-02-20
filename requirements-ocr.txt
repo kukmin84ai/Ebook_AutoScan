@@ -1,0 +1,21 @@
+# OCR 파이프라인 의존성
+# KLOCR: GitHub에서 별도 설치 (setup_ocr_env.py 참조)
+
+# PaddleOCR (기본 엔진)
+paddlepaddle-gpu>=3.0.0
+paddleocr>=2.7.0
+
+# 레이아웃 분석
+surya-ocr>=0.6.0
+
+# 이미지 처리
+opencv-python>=4.8.0
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# 대체 OCR 엔진 (선택)
+# easyocr>=1.7.0
+
+# 유틸
+tqdm>=4.65.0
+pyyaml>=6.0

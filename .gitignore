@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+venv_ocr/
+
+# Captures (large image files)
+captures/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# KLOCR model weights
+KLOCR/
+weights/
+
+# OCR checkpoints
+.ocr_checkpoint.json
+.ocr_checkpoint.json.bak
+
+# Claude Code
+.claude/
