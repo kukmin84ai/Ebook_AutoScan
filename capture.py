@@ -1,13 +1,14 @@
 """
 알라딘 PC 뷰어 자동 스크린 캡쳐
 - 지정 영역 or 전체 화면 캡쳐
-- 방향키(→)로 페이지 넘김
+- 방향키(->)로 페이지 넘김
 - 캡쳐 간 딜레이 조절 가능
 - 책 영역 자동 탐지
 - DPI-aware 고해상도 캡쳐
 """
 
 import ctypes
+import ctypes.wintypes
 import pyautogui
 import keyboard
 import time
@@ -16,9 +17,9 @@ import sys
 import argparse
 import numpy as np
 from datetime import datetime
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageGrab
 
-# Windows DPI 인식 활성화 — 고해상도 캡쳐를 위해 필수
+# Windows DPI 인식 활성화 - 고해상도 캡쳐를 위해 필수
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Per-Monitor DPI Aware
 except Exception:
@@ -42,7 +43,7 @@ def detect_book_region() -> tuple | None:
     알라딘 뷰어의 책 페이지는 주변(툴바, 배경)과 색상 차이가 크므로
     밝은 직사각형 영역(책 페이지)을 찾아냄.
     """
-    print("\n🔍 책 영역 자동 탐지 중...")
+    print("\n책 영역 자동 탐지 중...")
     print("   알라딘 뷰어가 화면에 보이는 상태여야 합니다.")
     time.sleep(1)
 
@@ -50,7 +51,7 @@ def detect_book_region() -> tuple | None:
     img = np.array(screenshot.convert("L"))  # 그레이스케일
     h, w = img.shape
 
-    # 책 페이지는 보통 밝은 영역(흰색 배경) — 임계값으로 이진화
+    # 책 페이지는 보통 밝은 영역(흰색 배경) - 임계값으로 이진화
     threshold = 240
     binary = (img > threshold).astype(np.uint8)
 
@@ -89,10 +90,10 @@ def detect_book_region() -> tuple | None:
     region_w = x2 - x1
     region_h = y2 - y1
     if region_w < w * 0.1 or region_h < h * 0.1:
-        print("   ⚠️  책 영역을 찾지 못했습니다. 수동 선택으로 전환합니다.")
+        print("   [!] 책 영역을 찾지 못했습니다. 수동 선택으로 전환합니다.")
         return None
     if region_w > w * 0.95 and region_h > h * 0.95:
-        print("   ⚠️  전체 화면이 감지되었습니다. 수동 선택으로 전환합니다.")
+        print("   [!] 전체 화면이 감지되었습니다. 수동 선택으로 전환합니다.")
         return None
 
     # 약간의 패딩 제거 (경계 여백 정리)
@@ -103,15 +104,15 @@ def detect_book_region() -> tuple | None:
     y2 = max(y2 - pad, y1)
 
     region = (x1, y1, x2 - x1, y2 - y1)
-    print(f"   ✅ 탐지 완료: 위치({x1}, {y1}), 크기 {region[2]}x{region[3]} px")
+    print(f"   [OK] 탐지 완료: 위치({x1}, {y1}), 크기 {region[2]}x{region[3]} px")
     return region
 
 
 def select_region() -> tuple | None:
     """캡쳐 영역 선택 (자동 탐지 / 수동 / 전체화면)"""
-    print("\n📐 캡쳐 영역을 설정합니다.")
+    print("\n캡쳐 영역을 설정합니다.")
     print("   [1] 전체 화면")
-    print("   [2] 영역 지정 (마우스로 좌상단 → 우하단 F8)")
+    print("   [2] 영역 지정 (마우스로 좌상단 -> 우하단 F8)")
     print("   [3] 자동 탐지 (책 영역 자동 감지)")
     choice = input("   선택: ").strip()
 
@@ -119,38 +120,57 @@ def select_region() -> tuple | None:
         region = detect_book_region()
         if region:
             return region
-        print("   → 수동 선택으로 전환합니다.\n")
+        print("   ->수동 선택으로 전환합니다.\n")
         choice = "2"
 
     if choice != "2":
         return None
 
-    print("\n   👆 알라딘 뷰어의 책 내용 좌상단 모서리에서 F8을 누르세요...")
+    print("\n알라딘 뷰어의 책 내용 좌상단 모서리에서 F8을 누르세요...")
     print("   (3초 후 감지 시작)")
     time.sleep(3)
     keyboard.wait("F8")
     x1, y1 = pyautogui.position()
-    print(f"   ✅ 좌상단: ({x1}, {y1})")
+    print(f"   [OK] 좌상단: ({x1}, {y1})")
 
-    print("   👆 이제 우하단 모서리에서 F8을 누르세요...")
+    print("이제 우하단 모서리에서 F8을 누르세요...")
     keyboard.wait("F8")
     x2, y2 = pyautogui.position()
-    print(f"   ✅ 우하단: ({x2}, {y2})")
+    print(f"   [OK] 우하단: ({x2}, {y2})")
 
     region = (x1, y1, x2 - x1, y2 - y1)
-    print(f"   📏 영역: {region[2]}x{region[3]} px")
+    print(f"영역: {region[2]}x{region[3]} px")
     return region
 
 
-def capture_page(output_dir: str, page_num: int, region: tuple | None = None) -> str:
+def get_active_window_region() -> tuple | None:
+    """활성 창(포그라운드 윈도우)의 영역을 반환 (멀티모니터 지원)"""
+    try:
+        hwnd = ctypes.windll.user32.GetForegroundWindow()
+        rect = ctypes.wintypes.RECT()
+        ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        # bbox: (left, top, right, bottom) for PIL ImageGrab
+        return (rect.left, rect.top, rect.right, rect.bottom)
+    except Exception:
+        return None
+
+
+def capture_page(output_dir: str, page_num: int, region: tuple | None = None,
+                 use_active_window: bool = False) -> str:
     """한 페이지 캡쳐"""
     filename = os.path.join(output_dir, f"page_{page_num:04d}.png")
-    
-    if region:
+
+    if use_active_window:
+        bbox = get_active_window_region()
+        if bbox:
+            screenshot = ImageGrab.grab(bbox=bbox, all_screens=True)
+        else:
+            screenshot = pyautogui.screenshot()
+    elif region:
         screenshot = pyautogui.screenshot(region=region)
     else:
         screenshot = pyautogui.screenshot()
-    
+
     screenshot.save(filename)
     return filename
 
@@ -180,6 +200,8 @@ def run_capture(
     region: tuple | None = None,
     auto_stop: bool = True,
     duplicate_limit: int = 3,
+    use_active_window: bool = False,
+    start_delay: int = 5,
 ):
     """
     메인 캡쳐 루프
@@ -196,15 +218,18 @@ def run_capture(
     output_dir = get_output_dir(book_name)
     
     print(f"\n{'='*50}")
-    print(f"📖 자동 캡쳐 시작: {book_name}")
+    print(f"자동 캡쳐 시작: {book_name}")
     print(f"   저장: {output_dir}/")
     print(f"   페이지 넘김: [{next_key}] 키")
     print(f"   딜레이: {delay}초")
     print(f"   총 페이지: {'자동감지' if total_pages == 0 else total_pages}")
     print(f"{'='*50}")
-    print(f"\n⏳ 5초 후 시작합니다. 알라딘 뷰어를 포커스하세요!")
-    print(f"   🛑 중지: ESC 키")
-    time.sleep(5)
+    print(f"\n{start_delay}초 후 시작합니다. 알라딘 뷰어를 포커스하세요!")
+    print(f"   [STOP] 중지: ESC 키")
+    for i in range(start_delay, 0, -1):
+        print(f"   {i}...", end="\r")
+        time.sleep(1)
+    print("   시작!   ")
     
     page = 1
     duplicate_count = 0
@@ -214,16 +239,16 @@ def run_capture(
         while True:
             # ESC 중지
             if keyboard.is_pressed("esc"):
-                print(f"\n🛑 ESC — 중지됨 (총 {page-1} 페이지)")
+                print(f"\n[STOP] ESC - 중지됨 (총 {page-1} 페이지)")
                 break
             
             # 총 페이지 도달
             if total_pages > 0 and page > total_pages:
-                print(f"\n✅ {total_pages} 페이지 완료!")
+                print(f"\n[OK] {total_pages} 페이지 완료!")
                 break
             
             # 캡쳐
-            filepath = capture_page(output_dir, page, region)
+            filepath = capture_page(output_dir, page, region, use_active_window)
             
             # 중복 감지
             if auto_stop and last_file:
@@ -235,7 +260,7 @@ def run_capture(
                             dup = os.path.join(output_dir, f"page_{page-i:04d}.png")
                             if os.path.exists(dup):
                                 os.remove(dup)
-                        print(f"\n✅ 마지막 페이지 감지! (총 {page - duplicate_limit} 페이지)")
+                        print(f"\n[OK] 마지막 페이지 감지! (총 {page - duplicate_limit} 페이지)")
                         break
                 else:
                     duplicate_count = 0
@@ -245,9 +270,9 @@ def run_capture(
             # 진행 표시
             if total_pages > 0:
                 pct = page / total_pages * 100
-                print(f"   📄 {page}/{total_pages} ({pct:.0f}%) — {filepath}", end="\r")
+                print(f"{page}/{total_pages} ({pct:.0f}%) - {filepath}", end="\r")
             else:
-                print(f"   📄 {page} — {filepath}", end="\r")
+                print(f"{page} - {filepath}", end="\r")
             
             # 페이지 넘기기
             pyautogui.press(next_key)
@@ -256,11 +281,11 @@ def run_capture(
             page += 1
             
     except KeyboardInterrupt:
-        print(f"\n🛑 Ctrl+C — 중지됨 (총 {page-1} 페이지)")
+        print(f"\n[STOP] Ctrl+C - 중지됨 (총 {page-1} 페이지)")
     
     # 결과
     files = [f for f in os.listdir(output_dir) if f.endswith(".png")]
-    print(f"\n📊 결과: {len(files)} 페이지 → {output_dir}/")
+    print(f"\n결과: {len(files)} 페이지 -> {output_dir}/")
     return output_dir
 
 
@@ -271,18 +296,21 @@ def main():
     parser.add_argument("--delay", "-d", type=float, default=1.0, help="페이지 넘김 딜레이 (초)")
     parser.add_argument("--key", "-k", default="right", help="페이지 넘김 키 (right/space/pagedown)")
     parser.add_argument("--fullscreen", "-f", action="store_true", help="전체 화면 캡쳐 (영역 선택 건너뜀)")
+    parser.add_argument("--window", "-w", action="store_true", help="활성 창 캡쳐 (듀얼모니터 지원)")
+    parser.add_argument("--start-delay", type=int, default=5, help="시작 전 대기 시간 (초, 기본 5)")
     parser.add_argument("--no-auto-stop", action="store_true", help="자동 정지 비활성화")
     
     args = parser.parse_args()
     
-    print("🖥️  알라딘 자동 캡쳐 도구")
+    print("알라딘 자동 캡쳐 도구")
     print("="*40)
     
     # 영역 선택
     region = None
-    if not args.fullscreen:
+    use_active_window = args.window
+    if not args.fullscreen and not args.window:
         region = select_region()
-    
+
     # 실행
     run_capture(
         book_name=args.name,
@@ -291,6 +319,8 @@ def main():
         next_key=args.key,
         region=region,
         auto_stop=not args.no_auto_stop,
+        use_active_window=use_active_window,
+        start_delay=args.start_delay,
     )
 
 
