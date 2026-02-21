@@ -1,4 +1,4 @@
-"""공통 유틸리티 — 로깅, 파일 I/O"""
+"""공통 유틸리티 -로깅, 파일 I/O"""
 
 import json
 import logging
@@ -22,7 +22,7 @@ def setup_logging(verbose: bool = False) -> logging.Logger:
     handler.setLevel(level)
 
     fmt = logging.Formatter(
-        "[%(asctime)s] %(levelname)s — %(message)s",
+        "[%(asctime)s] %(levelname)s -%(message)s",
         datefmt="%H:%M:%S",
     )
     handler.setFormatter(fmt)

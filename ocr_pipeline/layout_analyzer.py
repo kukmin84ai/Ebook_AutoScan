@@ -1,4 +1,4 @@
-"""레이아웃 분석 — Surya 기반 영역 검출 및 읽기 순서 결정"""
+"""레이아웃 분석 -Surya 기반 영역 검출 및 읽기 순서 결정"""
 
 import logging
 from dataclasses import dataclass
@@ -61,7 +61,7 @@ def _init_surya():
         logger.info("Surya 레이아웃 모델 초기화 완료")
     except Exception as e:
         _surya_available = False
-        logger.warning("Surya 사용 불가 — 전체 페이지를 단일 텍스트 영역으로 처리합니다: %s", e)
+        logger.warning("Surya 사용 불가 -전체 페이지를 단일 텍스트 영역으로 처리합니다: %s", e)
 
     return _surya_available
 
@@ -100,7 +100,7 @@ def analyze_layout(image: np.ndarray, page_num: int, config: OCRConfig) -> PageL
     if config.use_layout and _init_surya():
         return _analyze_with_surya(image, page_num, w, h)
 
-    # Surya 미사용 또는 사용 불가 — 전체 페이지를 하나의 텍스트 영역으로
+    # Surya 미사용 또는 사용 불가 -전체 페이지를 하나의 텍스트 영역으로
     region = LayoutRegion(
         id=0,
         bbox=[0, 0, w, h],

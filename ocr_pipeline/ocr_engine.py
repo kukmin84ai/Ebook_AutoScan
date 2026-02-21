@@ -1,4 +1,4 @@
-"""OCR 엔진 래퍼 — 다중 백엔드 지원 (KLOCR / PaddleOCR / EasyOCR)"""
+"""OCR 엔진 래퍼 -다중 백엔드 지원 (KLOCR / PaddleOCR / EasyOCR)"""
 
 import time
 import logging
@@ -117,7 +117,7 @@ class KLOCREngine(BaseOCREngine):
                     ))
         except RuntimeError as e:
             if "out of memory" in str(e).lower() or "CUDA" in str(e):
-                self.logger.warning("KLOCR GPU 메모리 부족 — 이 페이지 건너뜀")
+                self.logger.warning("KLOCR GPU 메모리 부족 -이 페이지 건너뜀")
             else:
                 raise
 
@@ -134,13 +134,9 @@ class PaddleOCREngine(BaseOCREngine):
 
         try:
             from paddleocr import PaddleOCR
-            self._ocr = PaddleOCR(
-                use_angle_cls=True,
-                lang="korean",
-                use_gpu=config.use_gpu,
-                show_log=False,
-            )
+            self._ocr = PaddleOCR(lang="korean")
             self._available = True
+            self._is_v3 = True  # PaddleOCR 3.x uses predict() instead of ocr()
             self.logger.debug("PaddleOCR 엔진 초기화 완료")
         except ImportError:
             self.logger.debug("paddleocr 패키지를 찾을 수 없습니다")
@@ -167,40 +163,61 @@ class PaddleOCREngine(BaseOCREngine):
         region_id = 1
         for target_img, fallback_bbox in targets:
             try:
-                ocr_output = self._ocr.ocr(target_img, cls=True)
+                if getattr(self, '_is_v3', False):
+                    # PaddleOCR 3.x API: predict()
+                    for page_result in self._ocr.predict(target_img):
+                        texts = getattr(page_result, 'rec_texts', [])
+                        scores = getattr(page_result, 'rec_scores', [])
+                        polys = getattr(page_result, 'dt_polys', [])
+                        for idx, (text, score) in enumerate(zip(texts, scores)):
+                            bbox = [0, 0, target_img.shape[1], target_img.shape[0]]
+                            if idx < len(polys):
+                                poly = polys[idx]
+                                xs = [p[0] for p in poly]
+                                ys = [p[1] for p in poly]
+                                bbox = [int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))]
+                            if regions:
+                                bbox = [
+                                    bbox[0] + fallback_bbox[0],
+                                    bbox[1] + fallback_bbox[1],
+                                    bbox[2] + fallback_bbox[0],
+                                    bbox[3] + fallback_bbox[1],
+                                ]
+                            results.append(OCRResult(
+                                region_id=region_id,
+                                text=text,
+                                confidence=float(score),
+                                bbox=bbox,
+                            ))
+                            region_id += 1
+                else:
+                    # PaddleOCR 2.x API: ocr()
+                    ocr_output = self._ocr.ocr(target_img, cls=True)
+                    if not ocr_output or ocr_output[0] is None:
+                        continue
+                    for line in ocr_output[0]:
+                        bbox_points = line[0]
+                        text, confidence = line[1]
+                        xs = [p[0] for p in bbox_points]
+                        ys = [p[1] for p in bbox_points]
+                        bbox = [int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))]
+                        if regions:
+                            bbox = [
+                                bbox[0] + fallback_bbox[0],
+                                bbox[1] + fallback_bbox[1],
+                                bbox[2] + fallback_bbox[0],
+                                bbox[3] + fallback_bbox[1],
+                            ]
+                        results.append(OCRResult(
+                            region_id=region_id,
+                            text=text,
+                            confidence=float(confidence),
+                            bbox=bbox,
+                        ))
+                        region_id += 1
             except Exception as e:
                 self.logger.warning(f"PaddleOCR 인식 실패: {e}")
                 continue
-
-            if not ocr_output or ocr_output[0] is None:
-                continue
-
-            for line in ocr_output[0]:
-                # line = [bbox_points, (text, confidence)]
-                bbox_points = line[0]
-                text, confidence = line[1]
-
-                # bbox_points는 4개의 꼭짓점 [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
-                xs = [p[0] for p in bbox_points]
-                ys = [p[1] for p in bbox_points]
-                bbox = [int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))]
-
-                # 영역 기준 좌표를 원본 이미지 기준으로 보정
-                if regions:
-                    bbox = [
-                        bbox[0] + fallback_bbox[0],
-                        bbox[1] + fallback_bbox[1],
-                        bbox[2] + fallback_bbox[0],
-                        bbox[3] + fallback_bbox[1],
-                    ]
-
-                results.append(OCRResult(
-                    region_id=region_id,
-                    text=text,
-                    confidence=float(confidence),
-                    bbox=bbox,
-                ))
-                region_id += 1
 
         return results
 
@@ -283,13 +300,13 @@ def create_engine(config: OCRConfig) -> BaseOCREngine:
         if engine.is_available():
             logger.info("OCR 엔진: KLOCR")
             return engine
-        logger.warning("KLOCR 사용 불가 — PaddleOCR로 폴백")
+        logger.warning("KLOCR 사용 불가 -PaddleOCR로 폴백")
 
         engine = PaddleOCREngine(config)
         if engine.is_available():
             logger.info("OCR 엔진: PaddleOCR (폴백)")
             return engine
-        logger.warning("PaddleOCR 사용 불가 — EasyOCR로 폴백")
+        logger.warning("PaddleOCR 사용 불가 -EasyOCR로 폴백")
 
         engine = EasyOCREngine(config)
         if engine.is_available():
@@ -301,7 +318,7 @@ def create_engine(config: OCRConfig) -> BaseOCREngine:
         if engine.is_available():
             logger.info("OCR 엔진: PaddleOCR")
             return engine
-        logger.warning("PaddleOCR 사용 불가 — EasyOCR로 폴백")
+        logger.warning("PaddleOCR 사용 불가 -EasyOCR로 폴백")
 
         engine = EasyOCREngine(config)
         if engine.is_available():
@@ -337,7 +354,7 @@ def run_ocr(
         results = engine.recognize(image, regions)
     except RuntimeError as e:
         if "out of memory" in str(e).lower() or "cuda" in str(e).lower():
-            logger.warning(f"페이지 {page_num}: GPU 메모리 부족 — 빈 결과 반환")
+            logger.warning(f"페이지 {page_num}: GPU 메모리 부족 -빈 결과 반환")
             return PageOCRResult(
                 page_num=page_num,
                 engine=engine_name,
@@ -346,7 +363,7 @@ def run_ocr(
             )
         raise
     except Exception as e:
-        logger.error(f"페이지 {page_num}: OCR 실패 — {e}")
+        logger.error(f"페이지 {page_num}: OCR 실패 -{e}")
         return PageOCRResult(
             page_num=page_num,
             engine=engine_name,

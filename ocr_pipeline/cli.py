@@ -20,7 +20,7 @@ from ocr_pipeline.checkpoint import (
 def parse_args(argv: list[str] | None = None) -> OCRConfig:
     """CLI 인자 파싱 → OCRConfig 변환"""
     parser = argparse.ArgumentParser(
-        description="OCR 파이프라인 — 캡쳐 이미지에서 한글 텍스트 추출"
+        description="OCR 파이프라인 - 캡쳐 이미지에서 한글 텍스트 추출"
     )
 
     parser.add_argument(
@@ -186,7 +186,7 @@ def run_pipeline(config: OCRConfig):
             # 5b. 품질 평가
             quality = assess_quality(image, config)
             if not quality.is_acceptable:
-                logger.warning(f"페이지 {page_num}: 품질 불량 — {quality.warnings}")
+                logger.warning(f"페이지 {page_num}: 품질 불량 - {quality.warnings}")
                 checkpoint.failed_pages.append(page_num)
                 continue
 

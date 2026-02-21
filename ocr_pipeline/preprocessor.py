@@ -24,7 +24,7 @@ class QualityResult:
 
 
 def assess_quality(image: np.ndarray, config: OCRConfig, page_num: int = 0) -> QualityResult:
-    """이미지 품질 평가 — 흐림, 밝기, 대비 검사"""
+    """이미지 품질 평가 -흐림, 밝기, 대비 검사"""
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
     # 흐림 감지: Laplacian 분산
@@ -88,7 +88,7 @@ def _detect_skew_angle(gray: np.ndarray) -> float:
 
 
 def preprocess(image: np.ndarray, config: OCRConfig) -> np.ndarray:
-    """이미지 전처리 — 기울기 보정, CLAHE, 노이즈 제거"""
+    """이미지 전처리 -기울기 보정, CLAHE, 노이즈 제거"""
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
     # 기울기 보정
@@ -122,7 +122,7 @@ def preprocess(image: np.ndarray, config: OCRConfig) -> np.ndarray:
 
 
 def run_quality_check(page_files: list[Path], config: OCRConfig) -> list[QualityResult]:
-    """배치 품질 검사 — 전체 페이지 품질 평가 및 요약 출력"""
+    """배치 품질 검사 -전체 페이지 품질 평가 및 요약 출력"""
     logger = setup_logging(config.verbose)
     results: list[QualityResult] = []
 

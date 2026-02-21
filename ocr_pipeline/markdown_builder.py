@@ -1,4 +1,4 @@
-"""마크다운 문서 조립 — OCR 결과를 Markdown 책으로 변환"""
+"""마크다운 문서 조립 -OCR 결과를 Markdown 책으로 변환"""
 
 import logging
 import re
@@ -16,6 +16,31 @@ logger = logging.getLogger("ocr_pipeline")
 _SENTENCE_END = re.compile(r"[.!?。…]\s*$")
 
 
+def _append_ocr_text(lines: list[str], ocr: dict, is_header: bool = False):
+    """OCR 결과 하나를 마크다운 라인에 추가"""
+    text = ocr.get("text", "").strip()
+    if not text:
+        return
+
+    confidence_level = ocr.get("confidence_level", "high")
+
+    if confidence_level == "very_low":
+        lines.append(f"<!-- 불확실: {text} -->")
+        lines.append("")
+        return
+
+    if confidence_level == "low":
+        lines.append(f"<!-- 불확실: {text} -->")
+        lines.append("")
+        return
+
+    if is_header:
+        lines.append(f"## {text}")
+    else:
+        lines.append(text)
+    lines.append("")
+
+
 def build_page_markdown(
     page_num: int, layout: dict, ocr_results: list[dict], config: OCRConfig
 ) -> str:
@@ -23,16 +48,25 @@ def build_page_markdown(
     regions = sorted(layout.get("regions", []), key=lambda r: r.get("reading_order", 0))
     lines: list[str] = []
 
-    # OCR 결과를 region id로 매핑
-    ocr_by_region: dict[int, dict] = {}
+    # OCR 결과를 region id로 매핑 (같은 region_id에 여러 결과 가능)
+    ocr_by_region: dict[int, list[dict]] = {}
     for r in ocr_results:
         rid = r.get("region_id")
         if rid is not None:
-            ocr_by_region[rid] = r
+            ocr_by_region.setdefault(rid, []).append(r)
 
-    # 매핑이 안 되면 순서대로 대응
-    unmatched_ocr = [r for r in ocr_results if r.get("region_id") is None]
-    unmatched_idx = 0
+    # 레이아웃 region과 OCR region_id 매칭 확인
+    region_ids = {r.get("id") for r in regions}
+    matched_any = any(rid in region_ids for rid in ocr_by_region)
+
+    # 매칭이 전혀 안 되면 (no-layout 모드 등) 모든 OCR 결과를 reading_order 순으로 출력
+    if not matched_any and ocr_results:
+        all_ocr = sorted(ocr_results, key=lambda r: r.get("reading_order", 0))
+        for ocr in all_ocr:
+            _append_ocr_text(lines, ocr)
+        lines.append(f"<!-- page {page_num} -->")
+        lines.append("")
+        return "\n".join(lines)
 
     figure_counter = 0
     table_counter = 0
@@ -42,18 +76,13 @@ def build_page_markdown(
         rid = region.get("id")
         extracted_image = region.get("extracted_image")
 
-        # OCR 텍스트 가져오기
-        ocr = ocr_by_region.get(rid)
-        if ocr is None and unmatched_idx < len(unmatched_ocr):
-            ocr = unmatched_ocr[unmatched_idx]
-            unmatched_idx += 1
+        # OCR 텍스트 가져오기 (이 region에 속한 모든 결과)
+        ocr_list = ocr_by_region.get(rid, [])
 
         if rtype == "figure":
             figure_counter += 1
             if extracted_image:
                 lines.append(f"![그림 {figure_counter}]({extracted_image})")
-            elif ocr and ocr.get("text"):
-                lines.append(f"![그림 {figure_counter}]")
             lines.append("")
             continue
 
@@ -61,44 +90,20 @@ def build_page_markdown(
             table_counter += 1
             if extracted_image:
                 lines.append(f"![표 {table_counter}]({extracted_image})")
-            elif ocr and ocr.get("text"):
-                lines.append(f"![표 {table_counter}]")
             lines.append("")
             continue
 
         if rtype == "footer":
-            # 각주는 작은 글씨 표시
-            if ocr and ocr.get("text"):
-                text = ocr["text"].strip()
+            for ocr in ocr_list:
+                text = ocr.get("text", "").strip()
                 if text:
                     lines.append(f"<sub>{text}</sub>")
                     lines.append("")
             continue
 
         # text, header 처리
-        if not ocr or not ocr.get("text"):
-            continue
-
-        text = ocr["text"].strip()
-        if not text:
-            continue
-
-        confidence_level = ocr.get("confidence_level", "high")
-
-        if confidence_level == "very_low":
-            lines.append(f"<!-- 불확실: {text} -->")
-            lines.append("")
-            continue
-
-        if confidence_level == "low":
-            lines.append(f"<!-- 불확실: {text} -->")
-            lines.append("")
-            continue
-
-        if rtype == "header":
-            lines.append(f"## {text}")
-        else:
-            lines.append(text)
+        for ocr in ocr_list:
+            _append_ocr_text(lines, ocr, is_header=(rtype == "header"))
 
         lines.append("")
 
