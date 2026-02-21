@@ -164,11 +164,11 @@ class PaddleOCREngine(BaseOCREngine):
         for target_img, fallback_bbox in targets:
             try:
                 if getattr(self, '_is_v3', False):
-                    # PaddleOCR 3.x API: predict()
+                    # PaddleOCR 3.x API: predict() - 결과는 dict-like 객체
                     for page_result in self._ocr.predict(target_img):
-                        texts = getattr(page_result, 'rec_texts', [])
-                        scores = getattr(page_result, 'rec_scores', [])
-                        polys = getattr(page_result, 'dt_polys', [])
+                        texts = page_result.get('rec_texts', []) if isinstance(page_result, dict) else getattr(page_result, 'rec_texts', [])
+                        scores = page_result.get('rec_scores', []) if isinstance(page_result, dict) else getattr(page_result, 'rec_scores', [])
+                        polys = page_result.get('dt_polys', []) if isinstance(page_result, dict) else getattr(page_result, 'dt_polys', [])
                         for idx, (text, score) in enumerate(zip(texts, scores)):
                             bbox = [0, 0, target_img.shape[1], target_img.shape[0]]
                             if idx < len(polys):
