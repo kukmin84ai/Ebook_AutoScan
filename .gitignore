@@ -9,6 +9,7 @@ build/
 # Virtual environments
 venv/
 venv_ocr/
+venv_klocr/
 
 # Captures (large image files)
 captures/
